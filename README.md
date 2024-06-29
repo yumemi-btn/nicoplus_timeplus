@@ -2,7 +2,7 @@
 
 nicoplus_timeplusは、ニコニコチャンネルプラスでタイムスタンプの保存を可能にするUserScriptです。
 
-![image](https://github.com/yumemi-btn/nicoplus_timeplus/assets/64613246/a7be2d93-8901-45dd-84c0-3c322e518472)
+![image](https://github.com/yumemi-btn/nicoplus_timeplus/assets/64613246/383bb38f-a0a6-4238-a077-b64660ab286e)
 
 ## インストール手順
 
