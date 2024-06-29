@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
-// @namespace    https://github.com/yourusername/nicoplus_timeplus
-// @version      0.1
+// @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
+// @version      0.2
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存を可能にするUserJSです
-// @author       Your GitHub Username
+// @author       @infinite_chain
 // @match        https://nicochannel.jp/*
 // @grant        GM_setClipboard
 // @grant        GM_info
@@ -21,6 +21,10 @@
       this.video = video;
       this.timestamps = this.loadTimestamps();
       this.createUI();
+      this.aRepeat = null;
+      this.bRepeat = null;
+      this.repeatInterval = null;
+      this.isSettingRepeat = false;
     }
 
     createUI() {
@@ -34,8 +38,9 @@
       const exportButton = this.createButton('エクスポート', () => this.exportTimestamps());
       const importButton = this.createButton('インポート', () => this.importTimestamps());
       const importReplaceButton = this.createButton('削除してインポート', () => this.importTimestamps(true));
+      this.repeatButton = this.createButton('A-Bリピート', () => this.toggleRepeatSetting());
 
-      buttonContainer.append(addButton, exportButton, importButton, importReplaceButton);
+      buttonContainer.append(addButton, exportButton, importButton, importReplaceButton, this.repeatButton);
 
       this.timestampsList = document.createElement('div');
       this.timestampsList.className = 'nicoplus-timeplus-list';
@@ -46,7 +51,13 @@
       const scriptVersion = GM_info.script.version;
       titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックで削除、マウスホイールで秒数調整</span>`;
 
-      controller.append(buttonContainer, this.timestampsList, titleDescription);
+      const backupRestoreContainer = document.createElement('div');
+      backupRestoreContainer.className = 'nicoplus-timeplus-backup-restore-container';
+      const backupButton = this.createButton('全てのデータをバックアップ', () => this.backupData());
+      const restoreButton = this.createButton('バックアップからリストア', () => this.restoreData());
+      backupRestoreContainer.append(backupButton, restoreButton);
+
+      controller.append(buttonContainer, this.timestampsList, titleDescription, backupRestoreContainer);
       this.wrapper.appendChild(controller);
 
       this.updateTimestamps();
@@ -96,8 +107,12 @@
         };
 
         button.onclick = () => {
-          this.video.currentTime = time;
-          this.video.play();
+          if (this.isSettingRepeat) {
+            this.setRepeatPoint(time, button);
+          } else {
+            this.video.currentTime = time;
+            this.video.play();
+          }
         };
 
         this.timestampsList.appendChild(button);
@@ -154,6 +169,73 @@
         this.updateTimestamps();
       }
     }
+
+    toggleRepeatSetting() {
+      if (this.isSettingRepeat) {
+        // リピート解除
+        this.isSettingRepeat = false;
+        this.aRepeat = this.bRepeat = null;
+        clearInterval(this.repeatInterval);
+        this.updateTimestamps();
+        this.repeatButton.textContent = 'A-Bリピート';
+      } else {
+        // リピート設定開始
+        this.isSettingRepeat = true;
+        this.repeatButton.textContent = 'A-Bリピート (タイムスタンプを選択してください)';
+      }
+    }
+
+    setRepeatPoint(time, button) {
+      if (this.aRepeat === null) {
+        this.aRepeat = time;
+        button.style.backgroundColor = 'yellow';
+      } else if (this.bRepeat === null && time > this.aRepeat) {
+        this.bRepeat = time;
+        button.style.backgroundColor = 'yellow';
+        this.startRepeat();
+      }
+    }
+
+    startRepeat() {
+      if (this.aRepeat !== null && this.bRepeat !== null) {
+        this.repeatButton.textContent = 'A-Bリピート (解除する)';
+        this.repeatInterval = setInterval(() => {
+          if (this.video.currentTime >= this.bRepeat || this.video.currentTime < this.aRepeat) {
+            this.video.currentTime = this.aRepeat;
+            this.video.play();
+          }
+        }, 100);
+      }
+    }
+
+    backupData() {
+      const data = {};
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith(STORAGE_KEY_PREFIX)) {
+          data[key] = localStorage.getItem(key);
+        }
+      });
+      const dataString = JSON.stringify(data);
+      GM_setClipboard(dataString);
+      alert('データをクリップボードにバックアップしました。');
+    }
+
+    restoreData() {
+      const input = prompt('バックアップデータを貼り付けてください:');
+      if (input) {
+        try {
+          const data = JSON.parse(input);
+          Object.keys(data).forEach(key => {
+            if (key.startsWith(STORAGE_KEY_PREFIX)) {
+              localStorage.setItem(key, data[key]);
+            }
+          });
+          alert('データをリストアしました。ページを再読み込みしてください。');
+        } catch (err) {
+          alert(`リストアに失敗しました: ${err}`);
+        }
+      }
+    }
   }
 
   function waitForElement(selector, callback) {
@@ -205,8 +287,10 @@
       display: flex;
       gap: 10px;
       margin-bottom: 10px;
+      flex-wrap: wrap;
     }
     .nicoplus-timeplus-button-container button,
+    .nicoplus-timeplus-backup-restore-container button,
     .nicoplus-timeplus-timestamp {
       padding: 5px 10px;
       background: #f0f0f0;
@@ -217,6 +301,7 @@
       transition: background 0.3s;
     }
     .nicoplus-timeplus-button-container button:hover,
+    .nicoplus-timeplus-backup-restore-container button:hover,
     .nicoplus-timeplus-timestamp:hover {
       background: #e0e0e0;
     }
@@ -236,6 +321,11 @@
     .nicoplus-timeplus-description {
       margin-left: 10px;
       font-size: 11px;
+    }
+    .nicoplus-timeplus-backup-restore-container {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
     }
   `;
   document.head.appendChild(style);
