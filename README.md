@@ -10,7 +10,7 @@ nicoplus_timeplusは、ニコニコチャンネルプラスでタイムスタン
    - [Firefox用Tampermonkey](https://addons.mozilla.org/ja/firefox/addon/tampermonkey/)
 
 2. **UserScriptのインストール**
-   - Tampermonkeyをインストールしたら、以下のリンクをクリックしてください：
+   - Tampermonkeyをインストールしたら、以下のリンクをクリックしてください：  
      [nicoplus_timeplus.user.js](https://github.com/yumemi-btn/nicoplus_timeplus/raw/main/nicoplus_timeplus.user.js)
    - インストール確認画面が表示されるので、「インストール」をクリックしてください。
 
