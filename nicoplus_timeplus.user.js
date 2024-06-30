@@ -155,12 +155,14 @@
         }
 
         button.onclick = () => {
-          if (this.isSettingRepeat) {
+          console.log(this)
+          if (this.repeatInterval) {
+            this.stopRepeat();
+            this.video.currentTime = time;
+            this.video.play();
+          } else if (this.isSettingRepeat) {
             this.setRepeatPoint(time, button);
           } else {
-            if (this.aRepeat !== null && this.bRepeat !== null) {
-              this.stopRepeat();
-            }
             this.video.currentTime = time;
             this.video.play();
           }
