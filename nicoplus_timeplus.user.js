@@ -11,35 +11,25 @@
 // @grant        GM_getValue
 // ==/UserScript==
 
-(function() {
+(function () {
   'use strict';
 
   const STORAGE_KEY_PREFIX = 'nicoplus_timeplus_';
+  const AUTO_ADD_ENABLED_KEY = `${STORAGE_KEY_PREFIX}auto_add_enabled`;
   const POLL_INTERVAL = 1000;
-  const AUTO_ADD_ENABLED_KEY = 'nicoplus_timeplus_auto_add_enabled';
-  const INSTANCE_KEY = 'nicoplus_timeplus_instance';
-
-  // スクリプトの二重実行を防ぐ
-  if (window[INSTANCE_KEY]) {
-    console.log('nicoplus_timeplus is already running. Skipping initialization.');
-    return;
-  }
-  window[INSTANCE_KEY] = true;
 
   class TimestampController {
     constructor(wrapper, video) {
       this.wrapper = wrapper;
       this.video = video;
       this.timestamps = this.loadTimestamps();
-      this.createUI();
       this.aRepeat = null;
       this.bRepeat = null;
       this.repeatInterval = null;
       this.isSettingRepeat = false;
-      this.autoAddEnabled = GM_getValue(AUTO_ADD_ENABLED_KEY, false);
-      this.debugLog = [];
-      this.lastProcessedCommentTime = 0;
+      this.autoAddEnabled = localStorage.getItem(AUTO_ADD_ENABLED_KEY) === 'true';
       this.activeMenu = null;
+      this.createUI();
     }
 
     createUI() {
@@ -51,12 +41,12 @@
 
       const addButton = this.createButton('現在の時間を追加', () => this.addTimestamp(Math.floor(this.video.currentTime)));
       this.repeatButton = this.createButton('A-Bリピート', () => this.toggleRepeatSetting());
-      this.autoAddButton = this.createButton(`★コメントから自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`, () => this.toggleAutoAdd());
+      this.autoAddButton = this.createButton(`“★”コメントを自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`, () => this.toggleAutoAdd());
 
       const exportButton = this.createDropdownButton('エクスポート', [
         { label: 'タイムスタンプをコピー', action: () => this.exportTimestamps(false) },
         { label: 'タイムスタンプとメモをコピー', action: () => this.exportTimestamps(true) },
-        { label: '共有URLとしてコピー', action: () => this.exportAsShareURL() },
+        { label: '共有URLをコピー', action: () => this.exportAsShareURL() },
         { label: '共有URLとタイトルをコピー', action: () => this.exportAsShareURLWithTitle() }
       ]);
 
@@ -118,15 +108,6 @@
       const menu = document.createElement('div');
       menu.className = 'nicoplus-timeplus-dropdown-menu';
       menu.style.display = 'none';
-
-      const rect = this.wrapper.getBoundingClientRect();
-      const isRightAligned = rect.right - window.innerWidth < 200; // メニューの幅を200pxと仮定
-
-      if (isRightAligned) {
-        menu.style.right = '0';
-      } else {
-        menu.style.left = '0';
-      }
 
       options.forEach(option => {
         const item = document.createElement('div');
@@ -216,21 +197,32 @@
 
     showTimestampMenu(time, memo, button) {
       this.closeActiveMenu();
-      const menu = this.createDropdownButton('', [
-        { label: '削除', action: () => {
-          this.timestamps = this.timestamps.filter(t => (typeof t === 'object' ? t.time : t) !== time);
+      const menu = document.createElement('div');
+      menu.className = 'nicoplus-timeplus-dropdown-menu';
+      menu.style.display = 'none';
+
+      const deleteOption = document.createElement('div');
+      deleteOption.textContent = '削除';
+      deleteOption.onclick = () => {
+        this.timestamps = this.timestamps.filter(t => (typeof t === 'object' ? t.time : t) !== time);
+        this.saveTimestamps();
+        this.updateTimestamps();
+        this.closeActiveMenu();
+      };
+
+      const editOption = document.createElement('div');
+      editOption.textContent = 'メモ編集';
+      editOption.onclick = () => {
+        const newMemo = prompt('メモを入力してください:', memo);
+        if (newMemo !== null) {
+          this.timestamps = this.timestamps.map(t => (typeof t === 'object' ? t.time : t) === time ? { time, memo: newMemo } : t);
           this.saveTimestamps();
           this.updateTimestamps();
-        }},
-        { label: 'メモ編集', action: () => {
-          const newMemo = prompt('メモを入力してください:', memo);
-          if (newMemo !== null) {
-            this.timestamps = this.timestamps.map(t => (typeof t === 'object' ? t.time : t) === time ? { time, memo: newMemo } : t);
-            this.saveTimestamps();
-            this.updateTimestamps();
-          }
-        }}
-      ]);
+        }
+        this.closeActiveMenu();
+      };
+
+      menu.append(deleteOption, editOption);
 
       const rect = button.getBoundingClientRect();
       const controllerRect = this.wrapper.getBoundingClientRect();
@@ -240,7 +232,7 @@
       menu.style.top = `${rect.bottom - controllerRect.top}px`;
 
       this.wrapper.appendChild(menu);
-      this.activeMenu = menu.querySelector('.nicoplus-timeplus-dropdown-menu');
+      this.activeMenu = menu;
       this.activeMenu.style.display = 'block';
     }
 
@@ -317,7 +309,7 @@
         } else {
           this.timestamps = [...this.timestamps, ...newTimestamps]
             .sort((a, b) => a.time - b.time)
-            .filter((t, i, arr) => i === 0 || t.time !== arr[i-1].time);
+            .filter((t, i, arr) => i === 0 || t.time !== arr[i - 1].time);
         }
         this.saveTimestamps();
         this.updateTimestamps();
@@ -335,7 +327,7 @@
       } else {
         // リピート設定開始
         this.isSettingRepeat = true;
-        this.repeatButton.textContent = 'A-Bリピート (タイムスタンプを選択してください)';
+        this.repeatButton.textContent = 'A-Bリピート (選択中)';
       }
     }
 
@@ -393,8 +385,8 @@
 
     toggleAutoAdd() {
       this.autoAddEnabled = !this.autoAddEnabled;
-      GM_setValue(AUTO_ADD_ENABLED_KEY, this.autoAddEnabled);
-      this.autoAddButton.textContent = `★コメントから自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`;
+      localStorage.setItem(AUTO_ADD_ENABLED_KEY, this.autoAddEnabled);
+      this.autoAddButton.textContent = `“★”コメントを自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`;
       if (this.autoAddEnabled) {
         this.startAutoAdd();
       } else {
@@ -404,18 +396,18 @@
 
     startAutoAdd() {
       this.autoAddInterval = setInterval(() => {
-        const commentContainer = document.querySelector('.jss300.show');
+        const commentContainer = document.querySelector('#video-page-wrapper + .MuiBox-root > .show');
         if (commentContainer) {
-          const comments = commentContainer.querySelectorAll('.jss382');
+          const comments = commentContainer.querySelectorAll('div');
           comments.forEach(comment => {
-            const timeElement = comment.querySelector('.jss386');
-            const contentElement = comment.querySelector('.jss384');
+            const timeElement = comment.querySelector('.MuiTypography-caption');
+            const contentElement = comment.querySelector('.MuiTypography-body2');
             if (timeElement && contentElement) {
-              const time = Math.max(0, this.parseTime(timeElement.textContent) - 2); // 2秒前に設定
               const content = contentElement.textContent;
-              if (time > this.lastProcessedCommentTime && content.includes('★')) {
+              console.log(content.innerText)
+              if (content.includes('★')) {
+                const time = Math.max(0, this.parseTime(timeElement.textContent) - 1);
                 this.addTimestamp(time, content);
-                this.lastProcessedCommentTime = time;
               }
             }
           });
@@ -446,7 +438,7 @@
           if (confirm('共有URLからタイムスタンプをインポートしますか？')) {
             this.timestamps = [...this.timestamps, ...decodedTimestamps]
               .sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b))
-              .filter((t, i, arr) => i === 0 || (typeof t === 'object' ? t.time : t) !== (typeof arr[i-1] === 'object' ? arr[i-1].time : arr[i-1]));
+              .filter((t, i, arr) => i === 0 || (typeof t === 'object' ? t.time : t) !== (typeof arr[i - 1] === 'object' ? arr[i - 1].time : arr[i - 1]));
             this.saveTimestamps();
             this.updateTimestamps();
           }
@@ -470,30 +462,10 @@
         aRepeat: this.aRepeat,
         bRepeat: this.bRepeat,
         userAgent: navigator.userAgent,
-        dateTime: new Date().toISOString(),
-        logs: this.debugLog,
-        lastError: this.lastError
+        dateTime: new Date().toISOString()
       };
       GM_setClipboard(JSON.stringify(debugInfo, null, 2));
       alert('デバッグ情報をクリップボードにコピーしました。');
-    }
-
-    log(message) {
-      this.debugLog.push(`${new Date().toISOString()}: ${message}`);
-      if (this.debugLog.length > 100) {
-        this.debugLog.shift();
-      }
-    }
-
-    // エラーハンドリングを改善
-    handleError(error) {
-      this.lastError = {
-        message: error.message,
-        stack: error.stack,
-        time: new Date().toISOString()
-      };
-      this.log(`Error: ${error.message}`);
-      console.error('nicoplus_timeplus error:', error);
     }
   }
 
@@ -509,6 +481,10 @@
 
   function initialize() {
     waitForElement('#video-player-wrapper', wrapper => {
+      if (wrapper.querySelector('.nicoplus-timeplus-controller')) {
+        console.log('nicoplus_timeplus UI already exists. Skipping initialization.');
+        return;
+      }
       waitForElement('.nfcp-video', video => {
         new TimestampController(wrapper, video);
       });
@@ -596,7 +572,7 @@
       background-color: #f9f9f9;
       min-width: 200px;
       box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-      padding: 12px 0px;
+      padding: 6px 0px;
       font-size: 13px;
     }
     .nicoplus-timeplus-dropdown-menu div {
@@ -604,22 +580,6 @@
       cursor: pointer;
     }
     .nicoplus-timeplus-dropdown-menu div:hover {
-      background-color: #f1f1f1;
-    }
-    .nicoplus-timeplus-context-menu {
-      position: absolute;
-      z-index: 10000;
-      background-color: #f9f9f9;
-      min-width: 120px;
-      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-      padding: 8px 0;
-      font-size: 13px;
-    }
-    .nicoplus-timeplus-context-menu div {
-      padding: 8px 16px;
-      cursor: pointer;
-    }
-    .nicoplus-timeplus-context-menu div:hover {
       background-color: #f1f1f1;
     }
   `;
