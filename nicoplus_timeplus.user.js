@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
 // @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
-// @version      0.3.1
+// @version      0.4
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存と追加機能を実装するUserJSです
 // @author       @infinite_chain
 // @match        https://nicochannel.jp/*
