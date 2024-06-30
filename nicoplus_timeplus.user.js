@@ -7,8 +7,6 @@
 // @match        https://nicochannel.jp/*
 // @grant        GM_setClipboard
 // @grant        GM_info
-// @grant        GM_setValue
-// @grant        GM_getValue
 // ==/UserScript==
 
 (function () {
@@ -82,7 +80,7 @@
       }
 
       document.addEventListener('click', (e) => {
-        if (!this.wrapper.contains(e.target)) {
+        if (!this.wrapper.contains(e.target) || !e.target.closest('.nicoplus-timeplus-dropdown-menu')) {
           this.closeActiveMenu();
         }
       });
@@ -140,16 +138,6 @@
     }
 
     updateTimestamps() {
-      const aRepeatButton = this.timestampsList.querySelector('.a-repeat');
-      const bRepeatButton = this.timestampsList.querySelector('.b-repeat');
-
-      if (aRepeatButton) {
-        aRepeatButton.classList.remove('a-repeat');
-      }
-      if (bRepeatButton) {
-        bRepeatButton.classList.remove('b-repeat');
-      }
-
       this.timestampsList.innerHTML = '';
       this.timestamps.forEach((timestamp) => {
         const time = typeof timestamp === 'object' ? timestamp.time : timestamp;
@@ -168,6 +156,10 @@
           if (this.isSettingRepeat) {
             this.setRepeatPoint(time, button);
           } else {
+            if (this.aRepeat !== null && this.bRepeat !== null &&
+              (time < this.aRepeat || time > this.bRepeat)) {
+              this.stopRepeat();
+            }
             this.video.currentTime = time;
             this.video.play();
           }
@@ -184,15 +176,37 @@
           let newTime = Math.max(0, time + delta);
 
           if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === newTime)) {
-            this.timestamps = this.timestamps.map(t => (typeof t === 'object' ? t.time : t) === time ? { time: newTime, memo } : t);
-            this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
-            this.saveTimestamps();
-            this.updateTimestamps();
+            this.updateTimestamp(time, newTime, memo);
           }
         };
 
         this.timestampsList.appendChild(button);
       });
+    }
+
+    updateTimestamp(oldTime, newTime, memo) {
+      this.timestamps = this.timestamps.map(t =>
+        (typeof t === 'object' ? t.time : t) === oldTime ? { time: newTime, memo } : t
+      );
+      this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
+      this.saveTimestamps();
+      this.updateRepeatRange(oldTime, newTime);
+      this.updateTimestamps();
+    }
+
+    updateRepeatRange(oldTime, newTime) {
+      if (this.aRepeat === oldTime) {
+        this.aRepeat = newTime;
+      } else if (this.bRepeat === oldTime) {
+        this.bRepeat = newTime;
+      }
+      if (this.aRepeat !== null && this.bRepeat !== null) {
+        if (this.aRepeat > this.bRepeat) {
+          this.stopRepeat();
+        } else {
+          this.startRepeat();
+        }
+      }
     }
 
     showTimestampMenu(time, memo, button) {
@@ -334,10 +348,10 @@
     setRepeatPoint(time, button) {
       if (this.aRepeat === null) {
         this.aRepeat = time;
-        button.style.backgroundColor = 'yellow';
+        this.updateTimestamps();
       } else if (this.bRepeat === null && time > this.aRepeat) {
         this.bRepeat = time;
-        button.style.backgroundColor = 'yellow';
+        this.updateTimestamps();
         this.startRepeat();
       }
     }
@@ -352,6 +366,14 @@
           }
         }, 100);
       }
+    }
+
+    stopRepeat() {
+      this.isSettingRepeat = false;
+      this.aRepeat = this.bRepeat = null;
+      clearInterval(this.repeatInterval);
+      this.updateTimestamps();
+      this.repeatButton.textContent = 'A-Bリピート';
     }
 
     backupData() {
@@ -404,7 +426,6 @@
             const contentElement = comment.querySelector('.MuiTypography-body2');
             if (timeElement && contentElement) {
               const content = contentElement.textContent;
-              console.log(content.innerText)
               if (content.includes('★')) {
                 const time = Math.max(0, this.parseTime(timeElement.textContent) - 1);
                 this.addTimestamp(time, content);
