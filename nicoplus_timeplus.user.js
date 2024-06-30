@@ -97,7 +97,8 @@
       const container = document.createElement('div');
       container.className = 'nicoplus-timeplus-dropdown';
 
-      const button = this.createButton(text, () => {
+      const button = this.createButton(text, (e) => {
+        e.stopPropagation();
         this.closeActiveMenu();
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
         this.activeMenu = menu;
@@ -110,7 +111,8 @@
       options.forEach(option => {
         const item = document.createElement('div');
         item.textContent = option.label;
-        item.onclick = () => {
+        item.onclick = (e) => {
+          e.stopPropagation();
           option.action();
           this.closeActiveMenu();
         };
@@ -156,8 +158,7 @@
           if (this.isSettingRepeat) {
             this.setRepeatPoint(time, button);
           } else {
-            if (this.aRepeat !== null && this.bRepeat !== null &&
-              (time < this.aRepeat || time > this.bRepeat)) {
+            if (this.aRepeat !== null && this.bRepeat !== null) {
               this.stopRepeat();
             }
             this.video.currentTime = time;
@@ -333,9 +334,9 @@
     toggleRepeatSetting() {
       if (this.isSettingRepeat) {
         // リピート解除
+        clearInterval(this.repeatInterval);
         this.isSettingRepeat = false;
         this.aRepeat = this.bRepeat = null;
-        clearInterval(this.repeatInterval);
         this.updateTimestamps();
         this.repeatButton.textContent = 'A-Bリピート';
       } else {
@@ -359,6 +360,9 @@
     startRepeat() {
       if (this.aRepeat !== null && this.bRepeat !== null) {
         this.repeatButton.textContent = 'A-Bリピート (解除する)';
+        if (this.repeatInterval) {
+          clearInterval(this.repeatInterval);
+        }
         this.repeatInterval = setInterval(() => {
           if (this.video.currentTime >= this.bRepeat || this.video.currentTime < this.aRepeat) {
             this.video.currentTime = this.aRepeat;
@@ -372,6 +376,7 @@
       this.isSettingRepeat = false;
       this.aRepeat = this.bRepeat = null;
       clearInterval(this.repeatInterval);
+      this.repeatInterval = null;
       this.updateTimestamps();
       this.repeatButton.textContent = 'A-Bリピート';
     }
@@ -479,9 +484,12 @@
         url: window.location.href,
         videoId: this.getVideoId(),
         timestamps: this.timestamps,
-        autoAddEnabled: this.autoAddEnabled,
         aRepeat: this.aRepeat,
         bRepeat: this.bRepeat,
+        repeatInterval: this.repeatInterval,
+        isSettingRepeat: this.isSettingRepeat,
+        autoAddEnabled: this.autoAddEnabled,
+        activeMenu: this.activeMenu,
         userAgent: navigator.userAgent,
         dateTime: new Date().toISOString()
       };
@@ -602,6 +610,11 @@
     }
     .nicoplus-timeplus-dropdown-menu div:hover {
       background-color: #f1f1f1;
+    }
+    .nicoplus-timeplus-timestamp.a-repeat,
+    .nicoplus-timeplus-timestamp.b-repeat {
+      background-color: yellow;
+      font-weight: bold;
     }
   `;
   document.head.appendChild(style);
