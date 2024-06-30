@@ -15,6 +15,7 @@
   const STORAGE_KEY_PREFIX = 'nicoplus_timeplus_';
   const AUTO_ADD_ENABLED_KEY = `${STORAGE_KEY_PREFIX}auto_add_enabled`;
   const POLL_INTERVAL = 1000;
+  let currentTimestampController = null;
 
   class TimestampController {
     constructor(wrapper, video) {
@@ -24,6 +25,7 @@
       this.aRepeat = null;
       this.bRepeat = null;
       this.repeatInterval = null;
+      this.autoAddInterval = null;
       this.isSettingRepeat = false;
       this.autoAddEnabled = localStorage.getItem(AUTO_ADD_ENABLED_KEY) === 'true';
       this.activeMenu = null;
@@ -304,7 +306,6 @@
     }
 
     exportAsShareURL() {
-      const videoId = this.getVideoId();
       const baseURL = location.origin + location.pathname;
       const encodedTimestamps = encodeURIComponent(JSON.stringify(this.timestamps));
       const shareURL = `${baseURL}?nicoplus_timeplus=${encodedTimestamps}`;
@@ -313,7 +314,6 @@
     }
 
     exportAsShareURLWithTitle() {
-      const videoId = this.getVideoId();
       const baseURL = location.origin + location.pathname;
       const encodedTimestamps = encodeURIComponent(JSON.stringify(this.timestamps));
       const shareURL = `${baseURL}?nicoplus_timeplus=${encodedTimestamps}`;
@@ -498,6 +498,14 @@
       }
     }
 
+    destroy() {
+      if (this.repeatInterval) {
+        clearInterval(this.repeatInterval);
+      }
+      if (this.autoAddInterval) {
+        clearInterval(this.autoAddInterval);
+      }
+    }
 
     copyDebugInfo() {
       const debugInfo = {
@@ -536,16 +544,19 @@
         return;
       }
       waitForElement('.nfcp-video', video => {
-        new TimestampController(wrapper, video);
+        if (currentTimestampController) {
+          currentTimestampController.destroy();
+        }
+        currentTimestampController = new TimestampController(wrapper, video);
       });
     });
   }
 
   // URL変更を監視
-  let lastUrl = location.href;
+  let lastUrl = location.origin + location.pathname;
   new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
+    if (location.origin + location.pathname !== lastUrl) {
+      lastUrl = location.origin + location.pathname;
       if (/https:\/\/nicochannel\.jp\/.*\/video\/.*/.test(lastUrl)) {
         initialize();
       }
