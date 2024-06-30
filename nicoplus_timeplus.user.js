@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
 // @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
-// @version      0.2
+// @version      0.3
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存と追加機能を実装するUserJSです
 // @author       @infinite_chain
 // @match        https://nicochannel.jp/*
 // @grant        GM_setClipboard
 // @grant        GM_info
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 (function() {
@@ -14,6 +16,7 @@
 
   const STORAGE_KEY_PREFIX = 'nicoplus_timeplus_';
   const POLL_INTERVAL = 1000;
+  const AUTO_ADD_ENABLED_KEY = 'nicoplus_timeplus_auto_add_enabled';
 
   class TimestampController {
     constructor(wrapper, video) {
@@ -25,8 +28,9 @@
       this.bRepeat = null;
       this.repeatInterval = null;
       this.isSettingRepeat = false;
-      this.autoAddEnabled = false;
+      this.autoAddEnabled = GM_getValue(AUTO_ADD_ENABLED_KEY, false);
       this.lastProcessedCommentTime = 0;
+      this.activeMenu = null;
     }
 
     createUI() {
@@ -38,12 +42,13 @@
 
       const addButton = this.createButton('現在の時間を追加', () => this.addTimestamp(Math.floor(this.video.currentTime)));
       this.repeatButton = this.createButton('A-Bリピート', () => this.toggleRepeatSetting());
-      this.autoAddButton = this.createButton('★コメントから自動追加', () => this.toggleAutoAdd());
+      this.autoAddButton = this.createButton(`★コメントから自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`, () => this.toggleAutoAdd());
 
       const exportButton = this.createDropdownButton('エクスポート', [
         { label: 'タイムスタンプをコピー', action: () => this.exportTimestamps(false) },
         { label: 'タイムスタンプとメモをコピー', action: () => this.exportTimestamps(true) },
-        { label: '共有URLとしてコピー', action: () => this.exportAsShareURL() }
+        { label: '共有URLとしてコピー', action: () => this.exportAsShareURL() },
+        { label: '共有URLとタイトルをコピー', action: () => this.exportAsShareURLWithTitle() }
       ]);
 
       const importButton = this.createDropdownButton('インポート', [
@@ -51,7 +56,7 @@
         { label: 'インポートして置き換え', action: () => this.importTimestamps(true) }
       ]);
 
-      buttonContainer.append(addButton, this.repeatButton, this.autoAddButton, exportButton, importButton);
+      buttonContainer.append(addButton, exportButton, importButton, this.autoAddButton, this.repeatButton);
 
       this.timestampsList = document.createElement('div');
       this.timestampsList.className = 'nicoplus-timeplus-list';
@@ -73,6 +78,9 @@
 
       this.updateTimestamps();
       this.checkShareURL();
+      if (this.autoAddEnabled) {
+        this.startAutoAdd();
+      }
     }
 
     createButton(text, onClick) {
@@ -87,7 +95,9 @@
       container.className = 'nicoplus-timeplus-dropdown';
 
       const button = this.createButton(text, () => {
+        this.closeActiveMenu();
         menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        this.activeMenu = menu;
       });
 
       const menu = document.createElement('div');
@@ -99,7 +109,7 @@
         item.textContent = option.label;
         item.onclick = () => {
           option.action();
-          menu.style.display = 'none';
+          this.closeActiveMenu();
         };
         menu.appendChild(item);
       });
@@ -108,10 +118,17 @@
       return container;
     }
 
+    closeActiveMenu() {
+      if (this.activeMenu) {
+        this.activeMenu.style.display = 'none';
+        this.activeMenu = null;
+      }
+    }
+
     addTimestamp(time, memo = '') {
-      if (!this.timestamps.some(t => t.time === time)) {
+      if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === time)) {
         this.timestamps.push({ time, memo });
-        this.timestamps.sort((a, b) => a.time - b.time);
+        this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
         this.saveTimestamps();
         this.updateTimestamps();
       }
@@ -119,7 +136,9 @@
 
     updateTimestamps() {
       this.timestampsList.innerHTML = '';
-      this.timestamps.forEach(({ time, memo }) => {
+      this.timestamps.forEach((timestamp) => {
+        const time = typeof timestamp === 'object' ? timestamp.time : timestamp;
+        const memo = typeof timestamp === 'object' ? timestamp.memo : '';
         const button = document.createElement('button');
         button.textContent = `${this.formatTime(time)}${memo ? ` - ${memo}` : ''}`;
         button.className = 'nicoplus-timeplus-timestamp';
@@ -156,6 +175,7 @@
     }
 
     showTimestampMenu(time, memo, button) {
+      this.closeActiveMenu();
       const menu = document.createElement('div');
       menu.className = 'nicoplus-timeplus-context-menu';
 
@@ -199,6 +219,7 @@
       setTimeout(() => {
         document.addEventListener('click', closeMenu);
       }, 0);
+      this.activeMenu = menu;
     }
 
     formatTime(seconds) {
@@ -238,11 +259,22 @@
 
     exportAsShareURL() {
       const videoId = this.getVideoId();
-      const baseURL = `https://nicochannel.jp/video/${videoId}`;
+      const baseURL = location.origin + location.pathname;
       const encodedTimestamps = encodeURIComponent(JSON.stringify(this.timestamps));
       const shareURL = `${baseURL}?nicoplus_timeplus=${encodedTimestamps}`;
       GM_setClipboard(shareURL);
       alert('共有URLをクリップボードにコピーしました。');
+    }
+
+    exportAsShareURLWithTitle() {
+      const videoId = this.getVideoId();
+      const baseURL = location.origin + location.pathname;
+      const encodedTimestamps = encodeURIComponent(JSON.stringify(this.timestamps));
+      const shareURL = `${baseURL}?nicoplus_timeplus=${encodedTimestamps}`;
+      const pageTitle = document.title;
+      const content = `${pageTitle}\n${shareURL}`;
+      GM_setClipboard(content);
+      alert('共有URLとタイトルをクリップボードにコピーしました。');
     }
 
     importTimestamps(replace = false) {
@@ -339,6 +371,7 @@
 
     toggleAutoAdd() {
       this.autoAddEnabled = !this.autoAddEnabled;
+      GM_setValue(AUTO_ADD_ENABLED_KEY, this.autoAddEnabled);
       this.autoAddButton.textContent = `★コメントから自動追加 (${this.autoAddEnabled ? 'ON' : 'OFF'})`;
       if (this.autoAddEnabled) {
         this.startAutoAdd();
@@ -390,14 +423,17 @@
           const decodedTimestamps = JSON.parse(decodeURIComponent(sharedTimestamps));
           if (confirm('共有URLからタイムスタンプをインポートしますか？')) {
             this.timestamps = [...this.timestamps, ...decodedTimestamps]
-              .sort((a, b) => a.time - b.time)
-              .filter((t, i, arr) => i === 0 || t.time !== arr[i-1].time);
+              .sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b))
+              .filter((t, i, arr) => i === 0 || (typeof t === 'object' ? t.time : t) !== (typeof arr[i-1] === 'object' ? arr[i-1].time : arr[i-1]));
             this.saveTimestamps();
             this.updateTimestamps();
           }
         } catch (err) {
           console.error('共有URLの解析に失敗しました:', err);
         }
+        // URLからパラメータを削除
+        const newUrl = window.location.href.split('?')[0];
+        window.history.replaceState({}, document.title, newUrl);
       }
     }
   }
@@ -497,11 +533,12 @@
     }
     .nicoplus-timeplus-dropdown-menu {
       position: absolute;
-      z-index: 1000;
+      z-index: 10000;
       background-color: #f9f9f9;
-      min-width: 0px;
+      min-width: 200px;
       box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
       padding: 12px 0px;
+      font-size: 13px;
     }
     .nicoplus-timeplus-dropdown-menu div {
       padding: 6px 6px;
@@ -512,11 +549,12 @@
     }
     .nicoplus-timeplus-context-menu {
       position: absolute;
-      z-index: 1000;
+      z-index: 10000;
       background-color: #f9f9f9;
       min-width: 120px;
       box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
       padding: 8px 0;
+      font-size: 13px;
     }
     .nicoplus-timeplus-context-menu div {
       padding: 8px 16px;
