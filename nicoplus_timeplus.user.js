@@ -131,12 +131,28 @@
     }
 
     addTimestamp(time, memo = '') {
-      if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === time)) {
-        this.timestamps.push({ time, memo });
-        this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
-        this.saveTimestamps();
-        this.updateTimestamps();
+      if (isNaN(time)) {
+        console.error('Invalid time value', time, memo);
+        return;
       }
+
+      const existingTimestamp = this.timestamps.find(t => (typeof t === 'object' ? t.time : t) === time);
+
+      if (existingTimestamp) {
+        if (typeof existingTimestamp === 'object') {
+          if (!existingTimestamp.memo) {
+            existingTimestamp.memo = memo;
+          }
+        } else {
+          this.timestamps = this.timestamps.map(t => (t === time ? { time, memo: memo !== '' ? memo : null } : t));
+        }
+      } else {
+        this.timestamps.push({ time, memo: memo !== '' ? memo : null });
+        this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
+      }
+
+      this.saveTimestamps();
+      this.updateTimestamps();
     }
 
     updateTimestamps() {
@@ -155,7 +171,6 @@
         }
 
         button.onclick = () => {
-          console.log(this)
           if (this.repeatInterval) {
             this.stopRepeat();
             this.video.currentTime = time;
@@ -218,15 +233,6 @@
       menu.className = 'nicoplus-timeplus-dropdown-menu';
       menu.style.display = 'none';
 
-      const deleteOption = document.createElement('div');
-      deleteOption.textContent = '削除';
-      deleteOption.onclick = () => {
-        this.timestamps = this.timestamps.filter(t => (typeof t === 'object' ? t.time : t) !== time);
-        this.saveTimestamps();
-        this.updateTimestamps();
-        this.closeActiveMenu();
-      };
-
       const editOption = document.createElement('div');
       editOption.textContent = 'メモ編集';
       editOption.onclick = () => {
@@ -239,7 +245,16 @@
         this.closeActiveMenu();
       };
 
-      menu.append(deleteOption, editOption);
+      const deleteOption = document.createElement('div');
+      deleteOption.textContent = '削除';
+      deleteOption.onclick = () => {
+        this.timestamps = this.timestamps.filter(t => (typeof t === 'object' ? t.time : t) !== time);
+        this.saveTimestamps();
+        this.updateTimestamps();
+        this.closeActiveMenu();
+      };
+
+      menu.append(editOption, deleteOption);
 
       const rect = button.getBoundingClientRect();
       const controllerRect = this.wrapper.getBoundingClientRect();
@@ -314,13 +329,13 @@
         const newTimestamps = input.split(/[\s,]+/)
           .filter(Boolean)
           .map(t => {
-            const [time, memo] = t.split(' - ');
+            const [time, memo = ''] = t.split(' - ');
             const parts = time.split(':').reverse();
-            return {
-              time: parts.reduce((acc, p, i) => acc + parseInt(p) * Math.pow(60, i), 0),
-              memo: memo || ''
-            };
-          });
+            const timeInSeconds = parts.reduce((acc, p, i) => acc + parseInt(p) * Math.pow(60, i), 0);
+            return isNaN(timeInSeconds) ? null : { time: timeInSeconds, memo };
+          })
+          .filter(Boolean);
+
         if (replace) {
           this.timestamps = newTimestamps;
         } else {
@@ -424,6 +439,9 @@
     }
 
     startAutoAdd() {
+      if (this.autoAddInterval) {
+        clearInterval(this.autoAddInterval);
+      }
       this.autoAddInterval = setInterval(() => {
         const commentContainer = document.querySelector('#video-page-wrapper + .MuiBox-root > .show');
         if (commentContainer) {
@@ -445,6 +463,7 @@
 
     stopAutoAdd() {
       clearInterval(this.autoAddInterval);
+      this.autoAddInterval = null;
     }
 
     parseTime(timeString) {
