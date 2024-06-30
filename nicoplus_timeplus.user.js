@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
 // @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
-// @version      0.4
+// @version      0.4.1
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存と追加機能を実装するUserJSです
 // @author       @infinite_chain
 // @match        https://nicochannel.jp/*
@@ -173,7 +173,7 @@
         }
 
         button.onclick = () => {
-          if (this.repeatInterval) {
+          if (this.aRepeat !== null && this.bRepeat !== null) {
             this.stopRepeat();
             this.video.currentTime = time;
             this.video.play();
@@ -363,12 +363,17 @@
       }
     }
 
-    setRepeatPoint(time, button) {
+    setRepeatPoint(time) {
       if (this.aRepeat === null) {
         this.aRepeat = time;
         this.updateTimestamps();
-      } else if (this.bRepeat === null && time > this.aRepeat) {
-        this.bRepeat = time;
+      } else if (this.bRepeat === null) {
+        if (time > this.aRepeat) {
+          this.bRepeat = time;
+        } else {
+          this.bRepeat = this.aRepeat;
+          this.aRepeat = time;
+        }
         this.updateTimestamps();
         this.startRepeat();
       }
