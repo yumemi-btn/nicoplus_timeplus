@@ -37,6 +37,7 @@
       this.repeatInterval = null;
       this.isSettingRepeat = false;
       this.autoAddEnabled = GM_getValue(AUTO_ADD_ENABLED_KEY, false);
+      this.debugLog = [];
       this.lastProcessedCommentTime = 0;
       this.activeMenu = null;
     }
@@ -79,7 +80,7 @@
       titleDescription.className = 'nicoplus-timeplus-title-description';
       const scriptName = GM_info.script.name;
       const scriptVersion = GM_info.script.version;
-      titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックでメニュー表示、マウスホイールで秒数調整</span>`;
+      titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックでメニュー表示、マウスホイールで秒数調整。</span>`;
 
       controller.append(buttonContainer, this.timestampsList, titleDescription);
       this.wrapper.appendChild(controller);
@@ -89,6 +90,12 @@
       if (this.autoAddEnabled) {
         this.startAutoAdd();
       }
+
+      document.addEventListener('click', (e) => {
+        if (!this.wrapper.contains(e.target)) {
+          this.closeActiveMenu();
+        }
+      });
     }
 
     createButton(text, onClick) {
@@ -111,6 +118,15 @@
       const menu = document.createElement('div');
       menu.className = 'nicoplus-timeplus-dropdown-menu';
       menu.style.display = 'none';
+
+      const rect = this.wrapper.getBoundingClientRect();
+      const isRightAligned = rect.right - window.innerWidth < 200; // メニューの幅を200pxと仮定
+
+      if (isRightAligned) {
+        menu.style.right = '0';
+      } else {
+        menu.style.left = '0';
+      }
 
       options.forEach(option => {
         const item = document.createElement('div');
@@ -143,6 +159,16 @@
     }
 
     updateTimestamps() {
+      const aRepeatButton = this.timestampsList.querySelector('.a-repeat');
+      const bRepeatButton = this.timestampsList.querySelector('.b-repeat');
+
+      if (aRepeatButton) {
+        aRepeatButton.classList.remove('a-repeat');
+      }
+      if (bRepeatButton) {
+        bRepeatButton.classList.remove('b-repeat');
+      }
+
       this.timestampsList.innerHTML = '';
       this.timestamps.forEach((timestamp) => {
         const time = typeof timestamp === 'object' ? timestamp.time : timestamp;
@@ -150,6 +176,12 @@
         const button = document.createElement('button');
         button.textContent = `${this.formatTime(time)}${memo ? ` - ${memo}` : ''}`;
         button.className = 'nicoplus-timeplus-timestamp';
+
+        if (time === this.aRepeat) {
+          button.classList.add('a-repeat');
+        } else if (time === this.bRepeat) {
+          button.classList.add('b-repeat');
+        }
 
         button.onclick = () => {
           if (this.isSettingRepeat) {
@@ -199,11 +231,15 @@
           }
         }}
       ]);
-      menu.style.position = 'absolute';
+
       const rect = button.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom}px`;
-      document.body.appendChild(menu);
+      const controllerRect = this.wrapper.getBoundingClientRect();
+
+      menu.style.position = 'absolute';
+      menu.style.left = `${rect.left - controllerRect.left}px`;
+      menu.style.top = `${rect.bottom - controllerRect.top}px`;
+
+      this.wrapper.appendChild(menu);
       this.activeMenu = menu.querySelector('.nicoplus-timeplus-dropdown-menu');
       this.activeMenu.style.display = 'block';
     }
@@ -375,7 +411,7 @@
             const timeElement = comment.querySelector('.jss386');
             const contentElement = comment.querySelector('.jss384');
             if (timeElement && contentElement) {
-              const time = this.parseTime(timeElement.textContent);
+              const time = Math.max(0, this.parseTime(timeElement.textContent) - 2); // 2秒前に設定
               const content = contentElement.textContent;
               if (time > this.lastProcessedCommentTime && content.includes('★')) {
                 this.addTimestamp(time, content);
@@ -423,6 +459,7 @@
       }
     }
 
+
     copyDebugInfo() {
       const debugInfo = {
         version: GM_info.script.version,
@@ -430,11 +467,33 @@
         videoId: this.getVideoId(),
         timestamps: this.timestamps,
         autoAddEnabled: this.autoAddEnabled,
+        aRepeat: this.aRepeat,
+        bRepeat: this.bRepeat,
         userAgent: navigator.userAgent,
-        dateTime: new Date().toISOString()
+        dateTime: new Date().toISOString(),
+        logs: this.debugLog,
+        lastError: this.lastError
       };
       GM_setClipboard(JSON.stringify(debugInfo, null, 2));
       alert('デバッグ情報をクリップボードにコピーしました。');
+    }
+
+    log(message) {
+      this.debugLog.push(`${new Date().toISOString()}: ${message}`);
+      if (this.debugLog.length > 100) {
+        this.debugLog.shift();
+      }
+    }
+
+    // エラーハンドリングを改善
+    handleError(error) {
+      this.lastError = {
+        message: error.message,
+        stack: error.stack,
+        time: new Date().toISOString()
+      };
+      this.log(`Error: ${error.message}`);
+      console.error('nicoplus_timeplus error:', error);
     }
   }
 
