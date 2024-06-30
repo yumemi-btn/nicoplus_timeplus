@@ -12,17 +12,17 @@ nicoplus_timeplusは、ニコニコチャンネルプラスでタイムスタン
    - [Chrome用Tampermonkey](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
    - [Firefox用Tampermonkey](https://addons.mozilla.org/ja/firefox/addon/tampermonkey/)
 
-2. **UserScriptのインストール**
+2. **デベロッパーモードの有効化 (Chromeのみ)**
+   - ChromeでTampermonkeyを利用する場合、[デベロッパーモードの有効化](https://www.tampermonkey.net/faq.php#Q209)を行う必要があります。
+
+3. **UserScriptのインストール**
    - Tampermonkeyをインストールしたら、以下のリンクをクリックしてください：  
      [nicoplus_timeplus.user.js](https://github.com/yumemi-btn/nicoplus_timeplus/raw/main/nicoplus_timeplus.user.js)
    - インストール確認画面が表示されるので、「インストール」をクリックしてください。
 
-3. **使用開始**
+4. **使用開始**
    - インストールが完了したら、ニコニコチャンネルプラスの動画ページを開いてください。
    - 動画プレーヤーの下に新しいコントロールパネルが表示されます。
-
-> [!TIP]
-> Chromeで正常に動作しない場合、`chrome://extensions/` を開き、右上「デベロッパーモード」の有効化をお試しください。(原因不明)
 
 ## 使い方
 
