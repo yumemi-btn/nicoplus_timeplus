@@ -17,6 +17,14 @@
   const STORAGE_KEY_PREFIX = 'nicoplus_timeplus_';
   const POLL_INTERVAL = 1000;
   const AUTO_ADD_ENABLED_KEY = 'nicoplus_timeplus_auto_add_enabled';
+  const INSTANCE_KEY = 'nicoplus_timeplus_instance';
+
+  // スクリプトの二重実行を防ぐ
+  if (window[INSTANCE_KEY]) {
+    console.log('nicoplus_timeplus is already running. Skipping initialization.');
+    return;
+  }
+  window[INSTANCE_KEY] = true;
 
   class TimestampController {
     constructor(wrapper, video) {
@@ -56,7 +64,13 @@
         { label: 'インポートして置き換え', action: () => this.importTimestamps(true) }
       ]);
 
-      buttonContainer.append(addButton, exportButton, importButton, this.autoAddButton, this.repeatButton);
+      const manageButton = this.createDropdownButton('管理', [
+        { label: '全てのデータをバックアップ', action: () => this.backupData() },
+        { label: 'バックアップからリストア', action: () => this.restoreData() },
+        { label: 'デバッグ情報をコピー', action: () => this.copyDebugInfo() }
+      ]);
+
+      buttonContainer.append(addButton, exportButton, importButton, this.autoAddButton, this.repeatButton, manageButton);
 
       this.timestampsList = document.createElement('div');
       this.timestampsList.className = 'nicoplus-timeplus-list';
@@ -67,13 +81,7 @@
       const scriptVersion = GM_info.script.version;
       titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックでメニュー表示、マウスホイールで秒数調整</span>`;
 
-      const backupRestoreContainer = document.createElement('div');
-      backupRestoreContainer.className = 'nicoplus-timeplus-backup-restore-container';
-      const backupButton = this.createButton('全てのデータをバックアップ', () => this.backupData());
-      const restoreButton = this.createButton('バックアップからリストア', () => this.restoreData());
-      backupRestoreContainer.append(backupButton, restoreButton);
-
-      controller.append(buttonContainer, this.timestampsList, titleDescription, backupRestoreContainer);
+      controller.append(buttonContainer, this.timestampsList, titleDescription);
       this.wrapper.appendChild(controller);
 
       this.updateTimestamps();
@@ -162,9 +170,9 @@
           const delta = e.deltaY < 0 ? 1 : -1;
           let newTime = Math.max(0, time + delta);
 
-          if (!this.timestamps.some(t => t.time === newTime)) {
-            this.timestamps = this.timestamps.map(t => t.time === time ? { ...t, time: newTime } : t);
-            this.timestamps.sort((a, b) => a.time - b.time);
+          if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === newTime)) {
+            this.timestamps = this.timestamps.map(t => (typeof t === 'object' ? t.time : t) === time ? { time: newTime, memo } : t);
+            this.timestamps.sort((a, b) => (typeof a === 'object' ? a.time : a) - (typeof b === 'object' ? b.time : b));
             this.saveTimestamps();
             this.updateTimestamps();
           }
@@ -176,50 +184,28 @@
 
     showTimestampMenu(time, memo, button) {
       this.closeActiveMenu();
-      const menu = document.createElement('div');
-      menu.className = 'nicoplus-timeplus-context-menu';
-
-      const deleteOption = document.createElement('div');
-      deleteOption.textContent = '削除';
-      deleteOption.onclick = () => {
-        this.timestamps = this.timestamps.filter(t => t.time !== time);
-        this.saveTimestamps();
-        this.updateTimestamps();
-        document.body.removeChild(menu);
-      };
-
-      const editOption = document.createElement('div');
-      editOption.textContent = 'メモ編集';
-      editOption.onclick = () => {
-        const newMemo = prompt('メモを入力してください:', memo);
-        if (newMemo !== null) {
-          this.timestamps = this.timestamps.map(t => t.time === time ? { ...t, memo: newMemo } : t);
+      const menu = this.createDropdownButton('', [
+        { label: '削除', action: () => {
+          this.timestamps = this.timestamps.filter(t => (typeof t === 'object' ? t.time : t) !== time);
           this.saveTimestamps();
           this.updateTimestamps();
-        }
-        document.body.removeChild(menu);
-      };
-
-      menu.append(deleteOption, editOption);
-
-      const rect = button.getBoundingClientRect();
+        }},
+        { label: 'メモ編集', action: () => {
+          const newMemo = prompt('メモを入力してください:', memo);
+          if (newMemo !== null) {
+            this.timestamps = this.timestamps.map(t => (typeof t === 'object' ? t.time : t) === time ? { time, memo: newMemo } : t);
+            this.saveTimestamps();
+            this.updateTimestamps();
+          }
+        }}
+      ]);
       menu.style.position = 'absolute';
+      const rect = button.getBoundingClientRect();
       menu.style.left = `${rect.left}px`;
       menu.style.top = `${rect.bottom}px`;
-
       document.body.appendChild(menu);
-
-      const closeMenu = (e) => {
-        if (!menu.contains(e.target)) {
-          document.body.removeChild(menu);
-          document.removeEventListener('click', closeMenu);
-        }
-      };
-
-      setTimeout(() => {
-        document.addEventListener('click', closeMenu);
-      }, 0);
-      this.activeMenu = menu;
+      this.activeMenu = menu.querySelector('.nicoplus-timeplus-dropdown-menu');
+      this.activeMenu.style.display = 'block';
     }
 
     formatTime(seconds) {
@@ -435,6 +421,20 @@
         const newUrl = window.location.href.split('?')[0];
         window.history.replaceState({}, document.title, newUrl);
       }
+    }
+
+    copyDebugInfo() {
+      const debugInfo = {
+        version: GM_info.script.version,
+        url: window.location.href,
+        videoId: this.getVideoId(),
+        timestamps: this.timestamps,
+        autoAddEnabled: this.autoAddEnabled,
+        userAgent: navigator.userAgent,
+        dateTime: new Date().toISOString()
+      };
+      GM_setClipboard(JSON.stringify(debugInfo, null, 2));
+      alert('デバッグ情報をクリップボードにコピーしました。');
     }
   }
 
