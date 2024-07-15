@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
 // @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
-// @version      0.4.1
+// @version      0.4.2
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存と追加機能を実装するUserJSです
 // @author       @infinite_chain
 // @match        https://nicochannel.jp/*
@@ -52,7 +52,8 @@
 
       const importButton = this.createDropdownButton('インポート', [
         { label: 'インポートして追加', action: () => this.importTimestamps(false) },
-        { label: 'インポートして置き換え', action: () => this.importTimestamps(true) }
+        { label: 'インポートして置き換え', action: () => this.importTimestamps(true) },
+        { label: 'タイムスタンプをクリア', action: () => this.deleteCurrentVideoTimestamps() }
       ]);
 
       const manageButton = this.createDropdownButton('管理', [
@@ -70,7 +71,7 @@
       titleDescription.className = 'nicoplus-timeplus-title-description';
       const scriptName = GM_info.script.name;
       const scriptVersion = GM_info.script.version;
-      titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックでメニュー表示、マウスホイールで秒数調整。</span>`;
+      titleDescription.innerHTML = `${scriptName} v${scriptVersion} <span class="nicoplus-timeplus-description">左クリックでジャンプ、右クリックでメニュー表示、Shift＋マウスホイールで秒数調整。</span>`;
 
       controller.append(buttonContainer, this.timestampsList, titleDescription);
       this.wrapper.appendChild(controller);
@@ -191,12 +192,14 @@
         };
 
         button.onwheel = (e) => {
-          e.preventDefault();
-          const delta = e.deltaY < 0 ? 1 : -1;
-          let newTime = Math.max(0, time + delta);
+          if (e.shiftKey) {
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 1 : -1;
+            let newTime = Math.max(0, time + delta);
 
-          if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === newTime)) {
-            this.updateTimestamp(time, newTime, memo);
+            if (!this.timestamps.some(t => (typeof t === 'object' ? t.time : t) === newTime)) {
+              this.updateTimestamp(time, newTime, memo);
+            }
           }
         };
 
@@ -500,6 +503,16 @@
         // URLからパラメータを削除
         const newUrl = window.location.href.split('?')[0];
         window.history.replaceState({}, document.title, newUrl);
+      }
+    }
+
+    deleteCurrentVideoTimestamps() {
+      if (confirm('この動画のタイムスタンプを全て削除しますか？')) {
+        const videoId = this.getVideoId();
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${videoId}`);
+        this.timestamps = [];
+        this.updateTimestamps();
+        alert('この動画のタイムスタンプを削除しました。');
       }
     }
 
