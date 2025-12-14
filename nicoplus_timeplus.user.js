@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         nicoplus_timeplus
 // @namespace    https://github.com/yumemi-btn/nicoplus_timeplus
-// @version      0.4.2
+// @version      0.5.1
 // @description  ニコニコチャンネルプラスにおいて、タイムスタンプの保存と追加機能を実装するUserJSです
 // @author       @infinite_chain
 // @match        https://nicochannel.jp/*
@@ -451,21 +451,23 @@
         clearInterval(this.autoAddInterval);
       }
       this.autoAddInterval = setInterval(() => {
-        const commentContainer = document.querySelector('#video-page-wrapper + .MuiBox-root > .show');
-        if (commentContainer) {
-          const comments = commentContainer.querySelectorAll('div');
-          comments.forEach(comment => {
-            const timeElement = comment.querySelector('.MuiTypography-caption');
-            const contentElement = comment.querySelector('.MuiTypography-body2');
-            if (timeElement && contentElement) {
-              const content = contentElement.textContent;
-              if (content.includes('★')) {
-                const time = Math.max(0, this.parseTime(timeElement.textContent) - 1);
-                this.addTimestamp(time, content);
-              }
-            }
-          });
-        }
+          const commentArea = document.querySelector('.EnableCommentArea-commentArea.show');
+          if (commentArea) {
+              const items = commentArea.querySelectorAll('.CommentDetail-wrapper');
+
+              items.forEach(item => {
+                  const timeEl = item.querySelector('.CommentDetail-subtitle');
+                  const contentEl = item.querySelector('.CommentDetail-comment');
+
+                  if (!timeEl || !contentEl) return;
+
+                  const content = contentEl.textContent ?? '';
+                  if (!content.includes('★')) return;
+
+                  const time = Math.max(0, this.parseTime(timeEl.textContent) - 1);
+                  this.addTimestamp(time, content);
+              });
+          }
       }, 1000);
     }
 
@@ -561,7 +563,7 @@
         console.log('nicoplus_timeplus UI already exists. Skipping initialization.');
         return;
       }
-      waitForElement('.nfcp-video', video => {
+      waitForElement('#video-player-wrapper video', video => {
         if (currentTimestampController) {
           currentTimestampController.destroy();
         }
